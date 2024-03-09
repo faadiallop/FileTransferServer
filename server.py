@@ -54,12 +54,14 @@ def data_processing(connection):
     headered = True
     buffer = ""
     data = ""
-    file_name = "output"
+    file_name = ""
     while True:
         data += connection.recv(buffer_size).decode()
         
         if headered:
-            data_size = int(data[:HEADERSIZE])
+            header = data[:HEADERSIZE]
+            # Last number identifies if this is a new file
+            data_size, new_file = int(header[:-1]), bool(int(header[-1]))
             data = data[HEADERSIZE:]
             headered = False
 
@@ -76,8 +78,13 @@ def data_processing(connection):
         if len(buffer) == data_size:
             if buffer == "exit": break
 
-            with open(file_name, "a") as file:
-                file.write(buffer)
+            if new_file: 
+                file_name = buffer + ".output"
+                new_file = False
+            else:
+                with open(file_name, "a") as file:
+                    file.write(buffer)
+            # FIX THIS 
             print(f"File has been written to {file_name}")
 
             headered = True
