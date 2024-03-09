@@ -54,6 +54,7 @@ def data_processing(connection):
     headered = True
     buffer = ""
     data = ""
+    file_name = "output"
     while True:
         data += connection.recv(buffer_size).decode()
         
@@ -70,12 +71,14 @@ def data_processing(connection):
             buffer += data
             data = ""
 
+        # THIS IS ALWAYS BEING HIT WHEN YOU READ IN DATA
+        # NOT WHEN YOU WRITE A FILE.
         if len(buffer) == data_size:
-            print(buffer)
             if buffer == "exit": break
 
-            with open("output", "a") as file:
-                file.write(data)
+            with open(file_name, "a") as file:
+                file.write(buffer)
+            print(f"File has been written to {file_name}")
 
             headered = True
             buffer = ""
