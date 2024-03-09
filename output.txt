@@ -1,6 +1,0 @@
-Here is some text that I will send to the server.
-Here is another line to check for new line characters.
-Here is some text that I will send to the server.
-Here is another line to check for new line characters.
-Here is some text that I will send to the server.
-Here is another line to check for new line characters.
