@@ -1,4 +1,4 @@
-""" File Transfer Server
+""" Multi-Threaded File Transfer Server
 
 This script allows the user to create a server that listens
 for incoming file transfers.
@@ -8,6 +8,7 @@ This program is an implementation of the File Transfer Protocol.
 """
 import socket
 import argparse
+import threading
 
 HEADERSIZE = 10
 
@@ -31,6 +32,8 @@ def main():
         server_socket.listen()
         print(f"Listening on port {listening_port}...")
 
+        # FIX THIS SO THAT EACH DATA PROCESSING FUNCTION
+        # ACCEPTS A CONNECTION ITSELF.
         max_connections = args.max_connections[0]
         while len(connections) < max_connections:
             client_socket, _ = server_socket.accept()
@@ -40,6 +43,12 @@ def main():
         for conn in connections:
             data_processing(conn)
 
+        # CREATE A THREAD FOR EACH CONNECTION
+        # SOMETHING LIKE THIS 
+        # while max_connections:
+        #     threading.Thread(target=data_processing)
+        #     max_connections -= 1
+       
     except KeyboardInterrupt:
         print("The server has been closed...")
     finally:
