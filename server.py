@@ -2,6 +2,8 @@
 
 This script allows the user to create a server that listens
 for incoming file transfers.
+If formatted corrected this server can also be interacted with through
+programs such as netcat.
 """
 import socket
 import argparse
@@ -92,20 +94,20 @@ def data_processing(connection):
             buffer += data
             data = ""
 
-        # THIS IS ALWAYS BEING HIT WHEN YOU READ IN DATA
-        # NOT WHEN YOU WRITE A FILE.
         if len(buffer) == data_size:
             if buffer == "exit":
                 break
 
-            if new_file:
-                file_name = buffer
+            if buffer == "done":
+                print(f"File has been written to {file_name}")
+            elif new_file:
+                file_name = buffer + ".output"
                 new_file = False
             else:
+                # YOU'RE OPENING THE FILE 4 TIMES FOR INPUT WHEN
+                # YOU'RE ONLY SUPPOSED TO OPEN IT TWICE:w
                 with open(file_name, "a", encoding="utf-8") as file:
                     file.write(buffer)
-            # FIX THIS
-            print(f"File has been written to {file_name}")
 
             headered = True
             buffer = ""

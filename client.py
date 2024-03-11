@@ -46,25 +46,25 @@ def main():
             if exception:
                 break
 
+            if not send_data(client_socket, "done", False):
+                break
+
             print(f"The file {(file.name)}",
                 "has been sent to the server.")
     except KeyboardInterrupt:
         print("The client has been closed...")
-        #ADD A CHECK FOR IF THE SERVER CLOSE PREMATURELY
     finally:
-        if not send_data(client_socket, "exit", False):
-            pass
+        send_data(client_socket, "exit", False)
         print("Closing client...")
         client_socket.close()
 
 def send_data(client_socket, data, new_file):
-    """ Parameters: data: String that client is sending to server.
+    """ Parameters: client_socket: Socket to send data to. 
+                    data: String that client is sending to server.
                     new_file: Boolean that indicates if this is a new
                     file or not.
-        Return: String where first 9 characters correspond to the data
-        size. The 10th character is a 1 or 0 corresponding to whether
-        this is the start of a new file. The rest is the data of that
-        is sent with the above header.
+        Return: Boolean that corresponds to whether the client was 
+        successful in sending a message to the server.
 
         This function takes data and returns that data with a header.
     """
