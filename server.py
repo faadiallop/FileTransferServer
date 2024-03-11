@@ -4,6 +4,7 @@ This script allows the user to create a server that listens
 for incoming file transfers.
 If formatted corrected this server can also be interacted with through
 programs such as netcat.
+This program is an implementation of the File Transfer Protocol.
 """
 import socket
 import argparse
