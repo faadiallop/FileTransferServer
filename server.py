@@ -21,20 +21,19 @@ def main():
         The server copies those files to the current directory.
         The file input from those clients is handled by other functions.
     """
-    try:
-        listening_port = 5555
-        print_lock = threading.Lock()
+    listening_port = 5555
+    print_lock = threading.Lock()
+    args = process_arguments()
+    max_connections = args.max_connections[0]
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-        args = process_arguments()
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    with server_socket:
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server_socket.bind(("", listening_port))
 
         server_socket.listen()
         print(f"Listening on port {listening_port}...")
 
-        max_connections = args.max_connections[0]
-        connections_semaphore = threading.Semaphore(max_connections)
         while True:
             ready_to_read, _, _ = select.select([server_socket], [], [])
             if ready_to_read:
@@ -50,9 +49,10 @@ def main():
                     thread = threading.Thread(
                         target=data_processing,
                         args=(connection,
-                              address,
-                              print_lock,
-                              connections_semaphore)
+                            address,
+                            print_lock,
+                            max_connections),
+                        daemon=True
                         )
                     thread.start()
                 else:
@@ -64,12 +64,7 @@ def main():
                             "while trying to send 'Failed' to the server!")
                         continue
                     client_print(address, "Attempted to connect but the " +
-                                 "maximum connections have been reached")
-    except KeyboardInterrupt:
-        print("The server has been closed...")
-    finally:
-        print("Closing server...")
-        server_socket.close()
+                                "maximum connections have been reached")
 
 def client_print(address, message):
     """ Parameters: address: Tuple of client IP address & port number.
@@ -98,71 +93,74 @@ def process_arguments():
                         )
     return parser.parse_args()
 
-def data_processing(connection, address, print_lock, connections_semaphore):
+def data_processing(connection, address, print_lock, max_connections):
     """ Parameters: connection: A client socket.
                     address: Tuple of Client IP address. 
                     print_lock: Lock for print statements.
-                    num_conn_lock: Lock for num_conn variable
         Return: None
 
         This function processes the file bytes from the client to copy
         that file to a file called {file name}.output.
     """
+    print("Number of available connections:",
+            f"{max_connections - (threading.active_count() - 1)}")
+    with connection:
+        buffer_size = 16
+        headered = True
+        buffer = ""
+        data = ""
+        file_name = ""
+        while True:
+            try:
+                data += connection.recv(buffer_size).decode()
+            except (BrokenPipeError, ConnectionResetError) as e:
+                print(f"Received exception {type(e).__name__}",
+                    f"while trying to receive data from the {address}")
+                break
 
-    with connections_semaphore:
-        print("Number of available connections:",
-              f"{connections_semaphore._value}")
-        with connection:
-            buffer_size = 16
-            headered = True
-            buffer = ""
-            data = ""
-            file_name = ""
-            while True:
-                try:
-                    data += connection.recv(buffer_size).decode()
-                except (BrokenPipeError, ConnectionResetError) as e:
-                    print(f"Received exception {type(e).__name__}",
-                        f"while trying to receive data from the {address}")
+            if headered:
+                header = data[:HEADERSIZE]
+                # Last number identifies if this is a new file
+                data_size = int(header[:-1])
+                new_file = bool(int(header[-1]))
+                data = data[HEADERSIZE:]
+                headered = False
+
+            if data_size - len(buffer) < len(data):
+                remaining_size = data_size - len(buffer)
+                buffer += data[:remaining_size]
+                data = data[remaining_size:]
+            else:
+                buffer += data
+                data = ""
+
+            if len(buffer) == data_size:
+                if buffer == "exit":
                     break
 
-                if headered:
-                    header = data[:HEADERSIZE]
-                    # Last number identifies if this is a new file
-                    data_size = int(header[:-1])
-                    new_file = bool(int(header[-1]))
-                    data = data[HEADERSIZE:]
-                    headered = False
-
-                if data_size - len(buffer) < len(data):
-                    remaining_size = data_size - len(buffer)
-                    buffer += data[:remaining_size]
-                    data = data[remaining_size:]
+                if buffer == "done":
+                    with print_lock:
+                        client_print(address,
+                                        f"File written to {file_name}")
+                elif new_file:
+                    file_name = buffer + ".output"
+                    new_file = False
                 else:
-                    buffer += data
-                    data = ""
+                    with open(file_name, "w+", encoding="utf-8") as file:
+                        file.write(buffer)
 
-                if len(buffer) == data_size:
-                    if buffer == "exit":
-                        break
-
-                    if buffer == "done":
-                        with print_lock:
-                            client_print(address,
-                                            f"File written to {file_name}")
-                    elif new_file:
-                        file_name = buffer + ".output"
-                        new_file = False
-                    else:
-                        with open(file_name, "a", encoding="utf-8") as file:
-                            file.write(buffer)
-
-                    headered = True
-                    buffer = ""
-        with print_lock:
-            client_print(address, "Client has exited!")
-        print("Number of available connections:",
-              f"{connections_semaphore._value + 1}")
+                headered = True
+                buffer = ""
+    with print_lock:
+        client_print(address, "Client has exited!")
+    # Minus 2 to account for the closing of current thread
+    print("Number of available connections:",
+            f"{max_connections - (threading.active_count() - 2)}")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("The server has been closed...")
+    finally:
+        print("Closing server...")
