@@ -24,7 +24,7 @@ def main():
     listening_port = 5555
     print_lock = threading.Lock()
     args = process_arguments()
-    max_connections = args.max_connections[0]
+    max_connections = args.max_connections
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     with server_socket:
@@ -88,7 +88,7 @@ def process_arguments():
     parser.add_argument("max_connections",
                         metavar="max_connections",
                         type=int,
-                        nargs=1,
+                        default=3,
                         help=help_max_conn
                         )
     return parser.parse_args()
@@ -140,13 +140,15 @@ def data_processing(connection, address, print_lock, max_connections):
 
                 if buffer == "done":
                     with print_lock:
-                        client_print(address,
-                                        f"File written to {file_name}")
+                        message = f"{file_name} written to {file_name}.output"
+                        client_print(address, message)
                 elif new_file:
-                    file_name = buffer + ".output"
+                    file_name = buffer
                     new_file = False
                 else:
-                    with open(file_name, "w+", encoding="utf-8") as file:
+                    with open(file_name + ".output",
+                                "w+",
+                                encoding="utf-8") as file:
                         file.write(buffer)
 
                 headered = True
