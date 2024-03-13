@@ -6,6 +6,7 @@ If formatted corrected this server can also be interacted with through
 programs such as netcat.
 This program is an implementation of the File Transfer Protocol.
 """
+import os
 import socket
 import select
 import argparse
@@ -146,10 +147,16 @@ def data_processing(connection, address, print_lock, max_connections):
                     file_name = buffer
                     new_file = False
                 else:
-                    with open(file_name + ".output",
-                                "w+",
-                                encoding="utf-8") as file:
-                        file.write(buffer)
+                    if not os.path.exists(file_name + ".output"):
+                        with open(file_name + ".output",
+                                    "w+",
+                                    encoding="utf-8") as file:
+                            file.write(buffer)
+                    else:
+                        with open(file_name + ".output",
+                                    "a",
+                                    encoding="utf-8") as file:
+                            file.write(buffer)
 
                 headered = True
                 buffer = ""
