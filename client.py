@@ -17,14 +17,19 @@ def main():
         ip_port = ("localhost", 5555)
 
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        status = "Failed"
         try:
             client_socket.connect(ip_port)
+            status = client_socket.recv(30).decode()
+            if status == "Accepted":
+                print("Connection has been accepted!")
+            else:
+                print("Connection has been rejected!")
         except ConnectionRefusedError:
             print("The server socket is not open!")
-            return
 
-        while True:
 
+        while status == "Accepted":
             file_name = str(input("File to transfer ('exit' to quit): "))
 
             if file_name == "exit":
@@ -54,7 +59,8 @@ def main():
     except KeyboardInterrupt:
         print("The client has been closed...")
     finally:
-        send_data(client_socket, "exit", False)
+        if status == "Accepted":
+            send_data(client_socket, "exit", False)
         print("Closing client...")
         client_socket.close()
 

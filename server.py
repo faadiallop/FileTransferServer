@@ -7,6 +7,7 @@ programs such as netcat.
 This program is an implementation of the File Transfer Protocol.
 """
 import socket
+import select
 import argparse
 import threading
 
@@ -22,38 +23,62 @@ def main():
     """
     try:
         listening_port = 5555
+        print_lock = threading.Lock()
 
         args = process_arguments()
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server_socket.bind(("", listening_port))
-
-        connections = []
 
         server_socket.listen()
         print(f"Listening on port {listening_port}...")
 
-        # FIX THIS SO THAT EACH DATA PROCESSING FUNCTION
-        # ACCEPTS A CONNECTION ITSELF.
         max_connections = args.max_connections[0]
-        while len(connections) < max_connections:
-            client_socket, _ = server_socket.accept()
-            print("Connection has been accepted!")
-            connections.append(client_socket)
-
-        for conn in connections:
-            data_processing(conn)
-
-        # CREATE A THREAD FOR EACH CONNECTION
-        # SOMETHING LIKE THIS 
-        # while max_connections:
-        #     threading.Thread(target=data_processing)
-        #     max_connections -= 1
-       
+        connections_semaphore = threading.Semaphore(max_connections)
+        while True:
+            ready_to_read, _, _ = select.select([server_socket], [], [])
+            if ready_to_read:
+                if threading.active_count() - 1 < max_connections:
+                    connection, address = server_socket.accept()
+                    try:
+                        connection.sendall(bytes("Accepted", "utf-8"))
+                    except (BrokenPipeError, ConnectionResetError) as e:
+                        print(f"Received exception {type(e).__name__}",
+                            "while trying to send 'Accepted' to the server!")
+                        continue
+                    client_print(address, "Connection has been accepted!")
+                    thread = threading.Thread(
+                        target=data_processing,
+                        args=(connection,
+                              address,
+                              print_lock,
+                              connections_semaphore)
+                        )
+                    thread.start()
+                else:
+                    connection, address = server_socket.accept()
+                    try:
+                        connection.sendall(bytes("Failed", "utf-8"))
+                    except (BrokenPipeError, ConnectionResetError) as e:
+                        print(f"Received exception {type(e).__name__}",
+                            "while trying to send 'Failed' to the server!")
+                        continue
+                    client_print(address, "Attempted to connect but the " +
+                                 "maximum connections have been reached")
     except KeyboardInterrupt:
         print("The server has been closed...")
     finally:
         print("Closing server...")
-        clean_up(server_socket, connections)
+        server_socket.close()
+
+def client_print(address, message):
+    """ Parameters: address: Tuple of client IP address & port number.
+                    message: String the client is sending to the server.
+        Return: None
+        
+        Prints message string the address prepended.
+    """
+    print(f"{address}: {message}")
 
 def process_arguments():
     """ Parameters: None
@@ -73,65 +98,67 @@ def process_arguments():
                         )
     return parser.parse_args()
 
-def data_processing(connection):
+def data_processing(connection, address, print_lock, connections_semaphore):
     """ Parameters: connection: A client socket.
+                    address: Tuple of Client IP address. 
+                    print_lock: Lock for print statements.
+                    num_conn_lock: Lock for num_conn variable
         Return: None
 
         This function processes the file bytes from the client to copy
         that file to a file called {file name}.output.
     """
-    buffer_size = 16
 
-    headered = True
-    buffer = ""
-    data = ""
-    file_name = ""
-    while True:
-        data += connection.recv(buffer_size).decode()
-
-        if headered:
-            header = data[:HEADERSIZE]
-            # Last number identifies if this is a new file
-            data_size, new_file = int(header[:-1]), bool(int(header[-1]))
-            data = data[HEADERSIZE:]
-            headered = False
-
-        if data_size - len(buffer) < len(data):
-            remaining_size = data_size - len(buffer)
-            buffer += data[:remaining_size]
-            data = data[remaining_size:]
-        else:
-            buffer += data
-            data = ""
-
-        if len(buffer) == data_size:
-            if buffer == "exit":
-                break
-
-            if buffer == "done":
-                print(f"File has been written to {file_name}")
-            elif new_file:
-                file_name = buffer + ".output"
-                new_file = False
-            else:
-                # YOU'RE OPENING THE FILE 4 TIMES FOR INPUT WHEN
-                # YOU'RE ONLY SUPPOSED TO OPEN IT TWICE:w
-                with open(file_name, "a", encoding="utf-8") as file:
-                    file.write(buffer)
-
+    with connections_semaphore:
+        print(f"Number of available connections: {connections_semaphore._value}")
+        with connection:
+            buffer_size = 16
             headered = True
             buffer = ""
+            data = ""
+            file_name = ""
+            while True:
+                try:
+                    data += connection.recv(buffer_size).decode()
+                except (BrokenPipeError, ConnectionResetError) as e:
+                    print(f"Received exception {type(e).__name__}",
+                        f"while trying to receive data from the {address}")
+                    break
 
-def clean_up(server_socket, connections):
-    """ Parameters: server_socket: The socket for the server.
-                    connections: The list of client sockets.
-        Return: None
+                if headered:
+                    header = data[:HEADERSIZE]
+                    # Last number identifies if this is a new file
+                    data_size, new_file = int(header[:-1]), bool(int(header[-1]))
+                    data = data[HEADERSIZE:]
+                    headered = False
 
-        This function takes in different sockets in order to close them.
-    """
-    for conn in connections:
-        conn.close()
-    server_socket.close()
+                if data_size - len(buffer) < len(data):
+                    remaining_size = data_size - len(buffer)
+                    buffer += data[:remaining_size]
+                    data = data[remaining_size:]
+                else:
+                    buffer += data
+                    data = ""
+
+                if len(buffer) == data_size:
+                    if buffer == "exit":
+                        break
+
+                    if buffer == "done":
+                        with print_lock:
+                            client_print(address, f"File written to {file_name}")
+                    elif new_file:
+                        file_name = buffer + ".output"
+                        new_file = False
+                    else:
+                        with open(file_name, "a", encoding="utf-8") as file:
+                            file.write(buffer)
+
+                    headered = True
+                    buffer = ""
+        with print_lock:
+            client_print(address, "Client has exited!")
+        print(f"Number of available connections: {connections_semaphore._value}")
 
 if __name__ == "__main__":
     main()
