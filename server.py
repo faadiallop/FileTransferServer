@@ -110,7 +110,8 @@ def data_processing(connection, address, print_lock, connections_semaphore):
     """
 
     with connections_semaphore:
-        print(f"Number of available connections: {connections_semaphore._value}")
+        print("Number of available connections:",
+              f"{connections_semaphore._value}")
         with connection:
             buffer_size = 16
             headered = True
@@ -128,7 +129,8 @@ def data_processing(connection, address, print_lock, connections_semaphore):
                 if headered:
                     header = data[:HEADERSIZE]
                     # Last number identifies if this is a new file
-                    data_size, new_file = int(header[:-1]), bool(int(header[-1]))
+                    data_size = int(header[:-1])
+                    new_file = bool(int(header[-1]))
                     data = data[HEADERSIZE:]
                     headered = False
 
@@ -146,7 +148,8 @@ def data_processing(connection, address, print_lock, connections_semaphore):
 
                     if buffer == "done":
                         with print_lock:
-                            client_print(address, f"File written to {file_name}")
+                            client_print(address,
+                                            f"File written to {file_name}")
                     elif new_file:
                         file_name = buffer + ".output"
                         new_file = False
@@ -158,7 +161,8 @@ def data_processing(connection, address, print_lock, connections_semaphore):
                     buffer = ""
         with print_lock:
             client_print(address, "Client has exited!")
-        print(f"Number of available connections: {connections_semaphore._value}")
+        print("Number of available connections:",
+              f"{connections_semaphore._value + 1}")
 
 if __name__ == "__main__":
     main()
